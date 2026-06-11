@@ -29,3 +29,6 @@ Thumbs.db
 tmp/
 temp/
 .cache/
+
+# Wrangler 本地缓存
+.wrangler/

@@ -1,11 +1,11 @@
 name = "checkip"  # Worker 的名称（确保全局唯一）
-account_id = "1fa4a41fa2ddd8803ce72aabee465b12"  # 替换为你的 Cloudflare 账户 ID
+# account_id = "your-account-id"  # 本地部署时在 wrangler.toml 自行填写，勿提交
 compatibility_date = "2025-03-06"  # 兼容性日期（必须添加）
 main = "work.js"  # 入口文件路径
 workers_dev = true  # 开启 Workers Dev 环境（开发测试用）
 
 [assets]
-directory = "."
+directory = "public"
 binding = "ASSETS"
 html_handling = "auto-trailing-slash"
 not_found_handling = "single-page-application"
