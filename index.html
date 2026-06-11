@@ -151,13 +151,103 @@
 
         async function fetchIp() {
             try {
-                const response = await fetch('https://httpbin.org/ip');
+                const response = await fetch('https://api.ipify.org?format=json');
                 const data = await response.json();
-                document.getElementById('ipList').value = data.origin; // 将获取的IP填入输入框
-                await startQuery(); // 自动执行查询
+                document.getElementById('ipList').value = data.ip;
+                await startQuery();
             } catch (error) {
                 console.error('获取IP地址失败', error);
             }
+        }
+
+        const BROWSER_PROVIDERS = [
+            {
+                name: 'ipinfo',
+                buildUrl: (ip) => `https://ipinfo.io/${ip}/json`,
+                normalize(data, ip) {
+                    if (data.error || data.bogon) return null;
+                    return {
+                        ip: data.ip || ip,
+                        country: data.country || '',
+                        city: data.city || data.region || '',
+                        isp: data.org || '',
+                        geo: data.loc || '',
+                        type: 'IPv4',
+                    };
+                },
+            },
+            {
+                name: 'geojs',
+                buildUrl: (ip) => `https://get.geojs.io/v1/ip/geo/${ip}.json`,
+                normalize(data, ip) {
+                    if (!data || data.country_code === 'XX') return null;
+                    return {
+                        ip: data.ip || ip,
+                        country: data.country || data.country_code || '',
+                        city: '',
+                        isp: data.organization_name || data.organization || '',
+                        geo:
+                            data.latitude != null && data.longitude != null
+                                ? `${data.latitude},${data.longitude}`
+                                : '',
+                        type: 'IPv4',
+                    };
+                },
+            },
+        ];
+
+        async function lookupIpViaWorker(ip) {
+            const response = await fetch(`/api/ip?ip=${encodeURIComponent(ip)}`);
+            if (!response.ok) return null;
+            const data = await response.json();
+            if (!data || data.country === '查询失败' || data.error) return null;
+            return {
+                ip: data.ip || ip,
+                country: data.country || '',
+                city: data.city || '',
+                isp: data.isp || '',
+                geo: data.geo || '',
+                type: data.type || '',
+            };
+        }
+
+        async function lookupIpViaBrowser(ip) {
+            for (const provider of BROWSER_PROVIDERS) {
+                try {
+                    const response = await fetch(provider.buildUrl(ip));
+                    if (!response.ok) continue;
+                    const data = await response.json();
+                    const result = provider.normalize(data, ip);
+                    if (result) return result;
+                } catch (error) {
+                    console.error(`${provider.name} 查询 ${ip} 失败`, error);
+                }
+            }
+            return null;
+        }
+
+        async function lookupIp(ip) {
+            try {
+                const workerResult = await lookupIpViaWorker(ip);
+                if (workerResult) return workerResult;
+            } catch (error) {
+                console.warn('Worker API 不可用，改用浏览器直连渠道', error);
+            }
+
+            const browserResult = await lookupIpViaBrowser(ip);
+            if (browserResult) return browserResult;
+
+            return { ip, country: '查询失败', city: '', isp: '', geo: '', type: '' };
+        }
+
+        async function mapWithConcurrency(items, mapper, concurrency = 5) {
+            const results = [];
+            for (let i = 0; i < items.length; i += concurrency) {
+                const batch = items.slice(i, i + concurrency);
+                const batchResults = await Promise.all(batch.map(mapper));
+                results.push(...batchResults);
+            }
+            return results;
         }
 
         function eventProperties() {
@@ -198,28 +288,7 @@
             document.getElementById('queryButton').disabled = true; // 禁用按钮
 
             try {
-                const requests = ipList.map(ip =>
-                    fetch(`https://ipwhois.app/json/${ip}?lang=zh-CN`)
-                        .then(res => res.json())
-                        .then(data => {
-                            data.ip = data.ip || ip;
-                            // 组装只需要的字段
-                            return {
-                                ip: data.ip,
-                                country: data.country || '',
-                                city: data.city || '',
-                                isp: data.isp || data.connection?.isp || '',
-                                geo: (data.latitude && data.longitude) ? `${data.latitude},${data.longitude}` : '',
-                                type: data.type || ''
-                            };
-                        })
-                        .catch(error => {
-                            console.error(`查询 ${ip} 失败`, error);
-                            return { ip, country: '查询失败', city: '', isp: '', geo: '', type: '' };
-                        })
-                );
-
-                const results = await Promise.all(requests);
+                const results = await mapWithConcurrency(ipList, lookupIp, 5);
                 currentData = results.filter(r => r.ip);
                 updateTable(currentData);
             } catch (error) {

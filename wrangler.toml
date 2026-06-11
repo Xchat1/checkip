@@ -3,6 +3,12 @@ account_id = "1fa4a41fa2ddd8803ce72aabee465b12"  # 替换为你的 Cloudflare �
 compatibility_date = "2025-03-06"  # 兼容性日期（必须添加）
 main = "work.js"  # 入口文件路径
 workers_dev = true  # 开启 Workers Dev 环境（开发测试用）
+
+[assets]
+directory = "."
+binding = "ASSETS"
+html_handling = "auto-trailing-slash"
+not_found_handling = "single-page-application"
 # route = "your.subdomain.workers.dev"  # 可选：指定 Workers Dev 子域名（如需自定义）
 
 # 以下是可选但推荐的配置

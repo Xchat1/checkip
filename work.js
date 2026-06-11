@@ -1,11 +1,122 @@
-export default {
-    async fetch(request, env) {
-        const url = new URL(request.url);
-        if (url.pathname === '/') {
-            return new Response(`<!DOCTYPE html>\n<html lang=\"zh-CN\">\n\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>IP归属地信息批量查询</title>\n    <link rel=\"icon\" href=\"https://nav.globalnextai.cn/source/face-with-monocle.webp\" type=\"image/webp\">\n    <link href=\"https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css\" rel=\"stylesheet\">\n    <style>\n        .container {\n            max-width: 1600px;\n            margin: 20px auto;\n        }\n\n        .input-area {\n            margin-bottom: 20px;\n        }\n\n        #ipList {\n            height: 150px;\n        }\n\n        .table-hover {\n            margin-top: 20px;\n        }\n\n        .sortable {\n            cursor: pointer;\n        }\n\n        .sortable:hover {\n            background-color: #f8f9fa;\n        }\n\n        .loading {\n            display: none;\n            margin: 20px 0;\n        }\n\n        .error {\n            color: red;\n        }\n\n        .table-responsive-custom {\n            overflow-x: auto;\n            width: 100%;\n        }\n\n        table.table {\n            min-width: 1400px;\n        }\n\n        @media (max-width: 600px) {\n            .container {\n                padding: 0 5px;\n            }\n\n            table.table {\n                min-width: 900px;\n                font-size: 13px;\n            }\n        }\n    </style>\n    <!-- posthog 分析   -->\n    <script>\n        !function (t, e) {\n            var o, n, p, r;\n            e.__SV || (window.posthog = e, e._i = [], e.init = function (i, s, a) {\n                function g(t, e) {\n                    var o = e.split(\".\");\n                    2 == o.length && (t = t[o[0]], e = o[1]), t[e] = function () {\n                        t.push([e].concat(Array.prototype.slice.call(arguments, 0)))\n                    }\n                }\n\n                (p = t.createElement(\"script\")).type = \"text/javascript\", p.async = !0, p.src = s.api_host.replace(\".i.posthog.com\", \"-assets.i.posthog.com\") + \"/static/array.js\", (r = t.getElementsByTagName(\"script\")[0]).parentNode.insertBefore(p, r);\n                var u = e;\n                for (void 0 !== a ? u = e[a] = [] : a = \"posthog\", u.people = u.people || [], u.toString = function (t) {\n                    var e = \"posthog\";\n                    return \"posthog\" !== a && (e += \".\" + a), t || (e += \" (stub)\"), e\n                }, u.people.toString = function () {\n                    return u.toString(1) + \".people (stub)\"\n                }, o = \"init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug\".split(\" \"), n = 0; n < o.length; n++) g(u, o[n]);\n                e._i.push([i, s, a])\n            }, e.__SV = 1)\n        }(document, window.posthog || []);\n        posthog.init(\'phc_KQiSD813czhhE7sQVw4Ba77yBTqeiSh55EkUHXyMbWm\', {\n            api_host: \'https://us.i.posthog.com\', person_profiles: \'identified_only\' // or \'always\' to create profiles for anonymous users as well\n        })\n    </script>\n</head>\n\n<body>\n    <div class=\"container\">\n        <h2 class=\"mb-4\">IP归属地信息批量查询</h2>\n\n        <div class=\"input-area\">\n            <div class=\"row\">\n                <div class=\"col-md-9\">\n                    <textarea class=\"form-control\" id=\"ipList\" placeholder=\"请输入要查询的IP地址，每行一个（最多100个）\"></textarea>\n                    <div id=\"error-message\" class=\"error\"></div>\n                </div>\n                <div class=\"col-md-3\">\n                    <button class=\"btn btn-primary w-100 mb-2\" id=\"queryButton\" onclick=\"startQuery()\">执行查询</button>\n                    <button class=\"btn btn-success w-100 mb-2\" onclick=\"exportCSV()\">导出CSV</button>\n                    <button class=\"btn btn-info w-100\" onclick=\"location.href=\'https://chaipip.com\'\">IP查定位</button>\n                </div>\n            </div>\n        </div>\n\n        <div class=\"loading text-center\">\n            <div class=\"spinner-border text-primary\" role=\"status\">\n                <span class=\"visually-hidden\">Loading...</span>\n            </div>\n            <div class=\"mt-2\">正在查询中，请稍候...</div>\n        </div>\n\n        <!-- 表格外层加横向滚动div -->\n        <div class=\"table-responsive-custom\">\n            <table class=\"table table-hover table-bordered\">\n                <thead class=\"table-light\" id=\"tableHead\">\n                    <tr id=\"tableHeadRow\">\n                        <th>IP地址</th>\n                        <th>IP类型</th>\n                        <th>所属国家</th>\n                        <th>所在城市</th>\n                        <th>运营商</th>\n                        <th>地理位置</th>\n                    </tr>\n                </thead>\n                <tbody id=\"resultTable\">\n                </tbody>\n            </table>\n        </div>\n    </div>\n\n    <script>\n        let currentData = [];\n        let sortOrder = 1; // 1: 升序, -1: 降序\n        let debounceTimeout;\n        // 只保留这6个字段，调整顺序和表头\n        const displayFields = [\n            { key: \'ip\', label: \'IP地址\' },\n            { key: \'type\', label: \'IP类型\' },\n            { key: \'country\', label: \'所属国家\' },\n            { key: \'city\', label: \'所在城市\' },\n            { key: \'isp\', label: \'运营商\' },\n            { key: \'geo\', label: \'地理位置\' }\n        ];\n\n        async function fetchIp() {\n            try {\n                const response = await fetch(\'https://httpbin.org/ip\');\n                const data = await response.json();\n                document.getElementById(\'ipList\').value = data.origin; // 将获取的IP填入输入框\n                await startQuery(); // 自动执行查询\n            } catch (error) {\n                console.error(\'获取IP地址失败\', error);\n            }\n        }\n\n        function eventProperties() {\n            return {\n                ip: document.getElementById(\'ipList\').value,\n                ipCount: currentData.length\n            };\n        }\n\n        window.onload = function () {\n            fetchIp(); // 页面加载时获取IP地址并执行查询\n            // 发送埋点，保持事件名称和属性一致\n            const eventName = \'check_ip_page_load\';\n            // 发送 PostHog 埋点\n            posthog.capture(eventName, eventProperties());\n        };\n\n        async function startQuery() {\n            const ipList = document.getElementById(\'ipList\').value\n                .split(\'\\n\')\n                .map(ip => ip.trim())\n                .filter(ip => ip.match(/\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b/))\n                .slice(0, 100);\n\n            if (ipList.length === 0) {\n                alert(\'请输入有效的IP地址\');\n                return;\n            }\n\n            // 发送 PostHog 埋点，记录用户输入的 IP 地址\n            posthog.capture(\'check_ip_query_start\', {\n                user_ips: ipList\n            });\n\n            showLoading(true);\n            currentData = [];\n            document.getElementById(\'error-message\').innerText = \'\'; // 清空错误信息\n            document.getElementById(\'queryButton\').disabled = true; // 禁用按钮\n\n            try {\n                const requests = ipList.map(ip =>\n                    fetch(\`https://ipwhois.app/json/\${ip}?lang=zh-CN\`)\n                        .then(res => res.json())\n                        .then(data => {\n                            data.ip = data.ip || ip;\n                            // 组装只需要的字段\n                            return {\n                                ip: data.ip,\n                                country: data.country || \'\',\n                                city: data.city || \'\',\n                                isp: data.isp || data.connection?.isp || \'\',\n                                geo: (data.latitude && data.longitude) ? \`\${data.latitude},\${data.longitude}\` : \'\',\n                                type: data.type || \'\'\n                            };\n                        })\n                        .catch(error => {\n                            console.error(\`查询 \${ip} 失败\`, error);\n                            return { ip, country: \'查询失败\', city: \'\', isp: \'\', geo: \'\', type: \'\' };\n                        })\n                );\n\n                const results = await Promise.all(requests);\n                currentData = results.filter(r => r.ip);\n                updateTable(currentData);\n            } catch (error) {\n                alert(\'查询失败，请稍后重试\');\n            } finally {\n                showLoading(false);\n                document.getElementById(\'queryButton\').disabled = false; // 启用按钮\n\n                // 发送 PostHog 埋点，记录查询结果\n                posthog.capture(\'check_ip_query_complete\', {\n                    user_ips: ipList,\n                    result_count: currentData.length\n                });\n            }\n        }\n\n        function updateTable(data) {\n            const tbody = document.getElementById(\'resultTable\');\n            tbody.innerHTML = data.map(item =>\n                \`<tr>\${displayFields.map(f => \`<td>\${item[f.key] !== undefined ? item[f.key] : \'\'}</td>\`).join(\'\')}</tr>\`\n            ).join(\'\');\n        }\n\n        function sortTable(columnIndex) {\n            const field = displayFields[columnIndex].key;\n            currentData.sort((a, b) => {\n                const valA = a[field];\n                const valB = b[field];\n                if (typeof valA === \'number\' && typeof valB === \'number\') {\n                    return (valA - valB) * sortOrder;\n                }\n                return String(valA || \'\').localeCompare(String(valB || \'\')) * sortOrder;\n            });\n            sortOrder *= -1;\n            updateTable(currentData);\n        }\n\n        function exportCSV() {\n            if (currentData.length === 0) return;\n            const csvContent = [\n                displayFields.map(f => f.label).join(\',\'),\n                ...currentData.map(item =>\n                    displayFields.map(f => {\n                        let val = item[f.key];\n                        if (val === undefined) val = \'\';\n                        if (typeof val === \'string\' && (val.includes(\',\') || val.includes(\'\"\') || val.includes(\'\\n\'))) {\n                            val = \'\"\' + val.replace(/\"/g, \'\"\"\') + \'\"\';\n                        }\n                        return val;\n                    }).join(\',\')\n                )\n            ].join(\'\\n\');\n\n            const blob = new Blob([csvContent], { type: \'text/csv\' });\n            const url = URL.createObjectURL(blob);\n            const a = document.createElement(\'a\');\n            a.href = url;\n\n            // 使用更简单的日期格式，避免使用toLocaleString\n            const now = new Date();\n            const year = now.getFullYear();\n            const month = String(now.getMonth() + 1).padStart(2, \'0\');\n            const day = String(now.getDate()).padStart(2, \'0\');\n            const hours = String(now.getHours()).padStart(2, \'0\');\n            const minutes = String(now.getMinutes()).padStart(2, \'0\');\n            const seconds = String(now.getSeconds()).padStart(2, \'0\');\n\n            a.download = \`IP查询结果_\${year}-\${month}-\${day}_\${hours}-\${minutes}-\${seconds}.csv\`;\n            a.click();\n        }\n\n        function showLoading(show) {\n            document.querySelector(\'.loading\').style.display = show ? \'block\' : \'none\';\n        }\n\n        // 防抖机制\n        function debounce(func, delay) {\n            return function (...args) {\n                clearTimeout(debounceTimeout);\n                debounceTimeout = setTimeout(() => func.apply(this, args), delay);\n            };\n        }\n\n        // 绑定输入框的输入事件\n        document.getElementById(\'ipList\').addEventListener(\'input\', debounce(function () {\n            document.getElementById(\'error-message\').innerText = \'\'; // 清空错误信息\n        }, 300));\n    </script>\n</body>\n\n</html>`, {
-                headers: { 'Content-Type': 'text/html; charset=utf-8' }
-            });
-        }
-        return new Response('Not Found', { status: 404 });
+const PROVIDERS = [
+  {
+    name: 'ip-api',
+    buildUrl: (ip) =>
+      `http://ip-api.com/json/${ip}?lang=zh-CN&fields=status,message,country,regionName,city,isp,lat,lon,as,query,mobile,proxy,hosting`,
+    normalize(data, ip) {
+      if (data.status !== 'success') return null;
+      return {
+        ip: data.query || ip,
+        country: data.country || '',
+        city: data.city || data.regionName || '',
+        isp: data.isp || data.as || '',
+        geo: data.lat != null && data.lon != null ? `${data.lat},${data.lon}` : '',
+        type: data.hosting ? '数据中心' : data.mobile ? '移动网络' : 'IPv4',
+        provider: 'ip-api',
+      };
+    },
+  },
+  {
+    name: 'ipinfo',
+    buildUrl: (ip) => `https://ipinfo.io/${ip}/json`,
+    normalize(data, ip) {
+      if (data.error || data.bogon) return null;
+      return {
+        ip: data.ip || ip,
+        country: data.country || '',
+        city: data.city || data.region || '',
+        isp: data.org || '',
+        geo: data.loc || '',
+        type: 'IPv4',
+        provider: 'ipinfo',
+      };
+    },
+  },
+  {
+    name: 'ipwhois',
+    buildUrl: (ip) => `https://ipwhois.app/json/${ip}?lang=zh-CN`,
+    normalize(data, ip) {
+      if (data.success === false) return null;
+      return {
+        ip: data.ip || ip,
+        country: data.country || '',
+        city: data.city || '',
+        isp: data.isp || data.connection?.isp || '',
+        geo:
+          data.latitude != null && data.longitude != null
+            ? `${data.latitude},${data.longitude}`
+            : '',
+        type: data.type || 'IPv4',
+        provider: 'ipwhois',
+      };
+    },
+  },
+];
+
+async function lookupIp(ip) {
+  for (const provider of PROVIDERS) {
+    try {
+      const response = await fetch(provider.buildUrl(ip), {
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) continue;
+      const data = await response.json();
+      const result = provider.normalize(data, ip);
+      if (result) return result;
+    } catch {
+      // try next provider
     }
+  }
+  return {
+    ip,
+    country: '查询失败',
+    city: '',
+    isp: '',
+    geo: '',
+    type: '',
+    provider: 'none',
+  };
 }
+
+function jsonResponse(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    },
+  });
+}
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+        },
+      });
+    }
+
+    if (url.pathname === '/api/ip') {
+      const ip = url.searchParams.get('ip')?.trim();
+      if (!ip || !/^(?:\d{1,3}\.){3}\d{1,3}$/.test(ip)) {
+        return jsonResponse({ error: '无效的 IP 地址' }, 400);
+      }
+      return jsonResponse(await lookupIp(ip));
+    }
+
+    if (env.ASETS) {
+      return env.ASSETS.fetch(request);
+    }
+
+    return new Response('IP Check API: GET /api/ip?ip=8.8.8.8', {
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    });
+  },
+};
