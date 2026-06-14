@@ -111,8 +111,8 @@ export default {
       return jsonResponse(await lookupIp(ip));
     }
 
-    if (env.ASETS) {
-      return env.ASSETS.fetch(request);
+    if (env.ASSETS) {
+      return env.ASSETS.fetch(request.url, request);
     }
 
     return new Response('IP Check API: GET /api/ip?ip=8.8.8.8', {
